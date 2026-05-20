@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kiyora Village – Cadastral Parcel Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #16213e;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #0f3460;
+      z-index: 1000;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #e2b04a;
+    }
+
+    header p {
+      font-size: 0.75rem;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #ccc;
+    }
+
+    .legend-box {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+
+    /* Leaflet popup styling */
+    .leaflet-popup-content-wrapper {
+      background: #16213e;
+      color: #eee;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+
+    .leaflet-popup-tip {
+      background: #16213e;
+    }
+
+    .popup-content h3 {
+      color: #e2b04a;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #0f3460;
+      padding-bottom: 6px;
+    }
+
+    .popup-content table {
+      width: 100%;
+      font-size: 0.8rem;
+      border-collapse: collapse;
+    }
+
+    .popup-content td {
+      padding: 3px 6px;
+    }
+
+    .popup-content td:first-child {
+      color: #aaa;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .popup-content td:last-child {
+      color: #fff;
+    }
+
+    .land-use-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      padding: 20px 32px;
+      text-align: center;
+      z-index: 9999;
+      color: #e2b04a;
+      font-size: 0.9rem;
+    }
+
+    #parcel-count {
+      font-size: 0.75rem;
+      background: #0f3460;
+      padding: 4px 12px;
+      border-radius: 20px;
+      color: #e2b04a;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🗺️ Kiyora Village — Cadastral Parcel Map</h1>
+    <p>Bumbogo Sector · Gasabo District · Kigali City</p>
+  </div>
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-box" style="background:#8B4513;"></div> Residential
+    </div>
+    <div class="legend-item">
+      <div class="legend-box" style="background:#2d7a2d;"></div> Agricultural
+    </div>
+    <div class="legend-item">
+      <div class="legend-box" style="background:#cc2200;"></div> Commercial
+    </div>
+    <div class="legend-item">
+      <div class="legend-box" style="background:#888;"></div> Other
+    </div>
+    <span id="parcel-count">Loading...</span>
+  </div>
+</header>
+
+<div id="map">
+  <div id="loading">⏳ Loading parcels...</div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<script>
+  // =============================================
+  // Initialize Leaflet Map
+  // =============================================
+  const map = L.map('map', {
+    center: [-1.875, 30.145],
+    zoom: 14,
+    zoomControl: true
+  });
+
+  // Basemap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map);
+
+  // =============================================
+  // Color parcels by Land Use
+  // =============================================
+  function getLandUseColor(landuse) {
+    if (!landuse) return '#888888';
+    const lu = landuse.trim().toLowerCase();
+    if (lu === 'residential')  return '#8B4513';  // Brown
+    if (lu === 'agricultural') return '#2d7a2d';  // Green
+    if (lu === 'commercial')   return '#cc2200';  // Red
+    if (lu.includes('resid'))  return '#8B4513';
+    if (lu.includes('agri'))   return '#2d7a2d';
+    if (lu.includes('comm'))   return '#cc2200';
+    return '#888888'; // Grey for unknown
+  }
+
+  function styleParcel(feature) {
+    const color = getLandUseColor(feature.properties.Landuse || feature.properties.landuse || '');
+    return {
+      fillColor: color,
+      fillOpacity: 0.6,
+      color: '#ffffff',
+      weight: 0.8,
+      opacity: 0.9
+    };
+  }
+
+  // =============================================
+  // Format area nicely
+  // =============================================
+  function formatArea(sqMeters) {
+    if (!sqMeters || isNaN(sqMeters)) return 'N/A';
+    const area = parseFloat(sqMeters);
+    if (area >= 10000) {
+      return (area / 10000).toFixed(4) + ' ha';
+    }
+    return area.toFixed(2) + ' m²';
+  }
+
+  // =============================================
+  // Badge color for popup
+  // =============================================
+  function getBadgeStyle(landuse) {
+    const lu = (landuse || '').toLowerCase();
+    if (lu.includes('resid'))  return 'background:#8B4513;color:#fff';
+    if (lu.includes('agri'))   return 'background:#2d7a2d;color:#fff';
+    if (lu.includes('comm'))   return 'background:#cc2200;color:#fff';
+    return 'background:#555;color:#fff';
+  }
+
+  // =============================================
+  // Popup on click
+  // =============================================
+  function onEachParcel(feature, layer) {
+    const p = feature.properties;
+
+    // Try common field name variations
+    const upi      = p.upi      || p.UPI      || p.Upi      || 'N/A';
+    const landuse  = p.Landuse  || p.landuse  || p.LandUse  || p.LANDUSE || 'Unknown';
+    const area     = p.st_area_sh || p.Shape_Area || p.area || p.AREA || null;
+
+    const popup = `
+      <div class="popup-content">
+        <h3>📦 Parcel Details</h3>
+        <table>
+          <tr>
+            <td>UPI</td>
+            <td><strong>${upi}</strong></td>
+          </tr>
+          <tr>
+            <td>Land Use</td>
+            <td>
+              <span class="land-use-badge" style="${getBadgeStyle(landuse)}">
+                ${landuse}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td>Area</td>
+            <td>${formatArea(area)}</td>
+          </tr>
+        </table>
+      </div>
+    `;
+
+    layer.bindPopup(popup, { maxWidth: 280 });
+
+    // Highlight on hover
+    layer.on('mouseover', function () {
+      layer.setStyle({ fillOpacity: 0.9, weight: 2, color: '#e2b04a' });
+    });
+    layer.on('mouseout', function () {
+      geojsonLayer.resetStyle(layer);
+    });
+  }
+
+  // =============================================
+  // Load GeoJSON
+  // !! IMPORTANT: Replace 'parcels.geojson' with
+  //    your actual GeoJSON filename on GitHub !!
+  // =============================================
+  let geojsonLayer;
+
+  fetch('parcels.geojson')
+    .then(res => {
+      if (!res.ok) throw new Error('GeoJSON file not found');
+      return res.json();
+    })
+    .then(data => {
+      document.getElementById('loading').remove();
+
+      geojsonLayer = L.geoJSON(data, {
+        style: styleParcel,
+        onEachFeature: onEachParcel
+      }).addTo(map);
+
+      // Fit map to parcels
+      map.fitBounds(geojsonLayer.getBounds());
+
+      // Update parcel count
+      const count = data.features ? data.features.length : 0;
+      document.getElementById('parcel-count').textContent = `${count.toLocaleString()} parcels`;
+    })
+    .catch(err => {
+      document.getElementById('loading').innerHTML =
+        `⚠️ Could not load GeoJSON.<br><small>Make sure <b>parcels.geojson</b> is in the same folder as this HTML file.</small>`;
+      console.error(err);
+    });
+</script>
+
+</body>
+</html>
