@@ -291,7 +291,7 @@
   // =============================================
   let geojsonLayer;
 
-  fetch('parcels.geojson')
+  fetch('KIYORA_Parcelsgeojson.json')
     .then(res => {
       if (!res.ok) throw new Error('GeoJSON file not found');
       return res.json();
