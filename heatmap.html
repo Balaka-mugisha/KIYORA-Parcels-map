@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kigali Population Heatmap 2022</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #161b22;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #ff6b35;
+      z-index: 1000;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #ff6b35;
+    }
+
+    header p {
+      font-size: 0.75rem;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    .legend {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .legend-title {
+      font-size: 0.7rem;
+      color: #aaa;
+      margin-bottom: 2px;
+    }
+
+    .legend-bar {
+      width: 160px;
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(to right, #0000ff, #00ff00, #ffff00, #ff0000);
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 160px;
+      font-size: 0.65rem;
+      color: #aaa;
+    }
+
+    #map { flex: 1; width: 100%; }
+
+    /* Sector info panel */
+    #info-panel {
+      position: absolute;
+      bottom: 30px;
+      left: 20px;
+      background: rgba(22, 27, 34, 0.92);
+      border: 1px solid #ff6b35;
+      border-radius: 10px;
+      padding: 14px 18px;
+      z-index: 1000;
+      min-width: 220px;
+      font-size: 0.8rem;
+    }
+
+    #info-panel h3 {
+      color: #ff6b35;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 6px;
+    }
+
+    #info-panel table { width: 100%; border-collapse: collapse; }
+    #info-panel td { padding: 3px 0; }
+    #info-panel td:first-child { color: #aaa; font-size: 0.75rem; }
+    #info-panel td:last-child { color: #fff; font-weight: 600; text-align: right; }
+
+    #sector-count {
+      font-size: 0.75rem;
+      background: #ff6b35;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🔥 Kigali City — Population Heatmap 2022</h1>
+    <p>35 Sectors · Gasabo · Nyarugenge · Kicukiro · Source: NISR 2022 Census</p>
+  </div>
+  <div class="legend">
+    <div class="legend-title">Population Density (per km²)</div>
+    <div class="legend-bar"></div>
+    <div class="legend-labels">
+      <span>Low</span>
+      <span>Medium</span>
+      <span>High</span>
+    </div>
+    <span id="sector-count">35 sectors</span>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<!-- Info panel -->
+<div id="info-panel">
+  <h3>📍 Sector Info</h3>
+  <table>
+    <tr><td>Sector</td><td id="p-sector">Hover a point</td></tr>
+    <tr><td>District</td><td id="p-district">—</td></tr>
+    <tr><td>Population</td><td id="p-pop">—</td></tr>
+    <tr><td>Area</td><td id="p-area">—</td></tr>
+    <tr><td>Density</td><td id="p-density">—</td></tr>
+  </table>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Leaflet Heat plugin -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+<script>
+
+  // =============================================
+  // Population data for all 35 Kigali sectors
+  // Format: [lat, lng, population, area, sector, district]
+  // =============================================
+  const sectorData = [
+    // GASABO
+    { sector: "Bumbogo",    district: "Gasabo",     lat: -1.8432, lng: 30.1245, pop: 112899, area: 67.2 },
+    { sector: "Kinyinya",   district: "Gasabo",     lat: -1.9012, lng: 30.1456, pop: 125400, area: 32.1 },
+    { sector: "Ndera",      district: "Gasabo",     lat: -1.8756, lng: 30.1678, pop: 95164,  area: 45.3 },
+    { sector: "Gisozi",     district: "Gasabo",     lat: -1.9178, lng: 30.0613, pop: 75611,  area: 9.1  },
+    { sector: "Nduba",      district: "Gasabo",     lat: -1.8234, lng: 30.0987, pop: 68424,  area: 55.8 },
+    { sector: "Jabana",     district: "Gasabo",     lat: -1.8567, lng: 30.1789, pop: 63862,  area: 38.4 },
+    { sector: "Rusororo",   district: "Gasabo",     lat: -1.8345, lng: 30.1567, pop: 61787,  area: 52.6 },
+    { sector: "Kimironko",  district: "Gasabo",     lat: -1.9345, lng: 30.1123, pop: 61733,  area: 12.4 },
+    { sector: "Gatsata",    district: "Gasabo",     lat: -1.9234, lng: 30.0456, pop: 46262,  area: 8.3  },
+    { sector: "Jali",       district: "Gasabo",     lat: -1.8901, lng: 30.1890, pop: 41156,  area: 44.2 },
+    { sector: "Remera",     district: "Gasabo",     lat: -1.9476, lng: 30.1061, pop: 38648,  area: 7.3  },
+    { sector: "Kacyiru",    district: "Gasabo",     lat: -1.9380, lng: 30.0800, pop: 30036,  area: 5.8  },
+    { sector: "Rutunga",    district: "Gasabo",     lat: -1.8123, lng: 30.1345, pop: 22468,  area: 38.1 },
+    { sector: "Gikomero",   district: "Gasabo",     lat: -1.8678, lng: 30.2012, pop: 19630,  area: 46.2 },
+    { sector: "Kimihurura", district: "Gasabo",     lat: -1.9380, lng: 30.0800, pop: 16425,  area: 5.1  },
+    // NYARUGENGE
+    { sector: "Kigali",     district: "Nyarugenge", lat: -1.9497, lng: 30.0586, pop: 61499,  area: 29.4 },
+    { sector: "Mageragere", district: "Nyarugenge", lat: -2.0123, lng: 30.0234, pop: 59747,  area: 47.2 },
+    { sector: "Kimisagara", district: "Nyarugenge", lat: -1.9623, lng: 30.0412, pop: 56534,  area: 4.8  },
+    { sector: "Nyamirambo", district: "Nyarugenge", lat: -1.9823, lng: 30.0378, pop: 55315,  area: 7.1  },
+    { sector: "Kanyinya",   district: "Nyarugenge", lat: -1.9956, lng: 29.9987, pop: 31026,  area: 22.3 },
+    { sector: "Nyakabanda", district: "Nyarugenge", lat: -1.9712, lng: 30.0523, pop: 29580,  area: 3.2  },
+    { sector: "Gitega",     district: "Nyarugenge", lat: -1.9534, lng: 30.0634, pop: 26668,  area: 3.9  },
+    { sector: "Muhima",     district: "Nyarugenge", lat: -1.9578, lng: 30.0489, pop: 22531,  area: 2.8  },
+    { sector: "Nyarugenge", district: "Nyarugenge", lat: -1.9672, lng: 30.0556, pop: 16665,  area: 4.6  },
+    { sector: "Rwezamenyo", district: "Nyarugenge", lat: -1.9686, lng: 30.0556, pop: 14754,  area: 1.0  },
+    // KICUKIRO
+    { sector: "Gahanga",    district: "Kicukiro",   lat: -2.0234, lng: 30.1123, pop: 79082,  area: 46.3 },
+    { sector: "Masaka",     district: "Kicukiro",   lat: -2.0012, lng: 30.1345, pop: 78788,  area: 28.7 },
+    { sector: "Kanombe",    district: "Kicukiro",   lat: -1.9712, lng: 30.1456, pop: 72346,  area: 22.1 },
+    { sector: "Gatenga",    district: "Kicukiro",   lat: -1.9834, lng: 30.1012, pop: 67084,  area: 8.4  },
+    { sector: "Kigarama",   district: "Kicukiro",   lat: -1.9956, lng: 30.1234, pop: 63153,  area: 14.2 },
+    { sector: "Nyarugunga", district: "Kicukiro",   lat: -1.9623, lng: 30.1345, pop: 49247,  area: 16.8 },
+    { sector: "Niboye",     district: "Kicukiro",   lat: -1.9745, lng: 30.0923, pop: 26912,  area: 6.3  },
+    { sector: "Kagarama",   district: "Kicukiro",   lat: -1.9589, lng: 30.1089, pop: 21277,  area: 5.8  },
+    { sector: "Gikondo",    district: "Kicukiro",   lat: -1.9712, lng: 30.0834, pop: 19803,  area: 4.7  },
+    { sector: "Kicukiro",   district: "Kicukiro",   lat: -1.9867, lng: 30.0978, pop: 14039,  area: 5.2  },
+  ];
+
+  // =============================================
+  // Initialize Map
+  // =============================================
+  const map = L.map('map', {
+    center: [-1.94, 30.06],
+    zoom: 11,
+    zoomControl: true
+  });
+
+  // Dark basemap
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap contributors © CARTO',
+    maxZoom: 19
+  }).addTo(map);
+
+  // =============================================
+  // Build heatmap points
+  // Intensity = population / area (density)
+  // =============================================
+  const maxDensity = Math.max(...sectorData.map(d => d.pop / d.area));
+
+  const heatPoints = sectorData.map(d => {
+    const density = d.pop / d.area;
+    const intensity = density / maxDensity; // normalize 0-1
+    return [d.lat, d.lng, intensity];
+  });
+
+  // =============================================
+  // Add heatmap layer
+  // =============================================
+  const heat = L.heatLayer(heatPoints, {
+    radius: 45,
+    blur: 35,
+    maxZoom: 13,
+    max: 1.0,
+    gradient: {
+      0.0: 'blue',
+      0.3: 'cyan',
+      0.5: 'lime',
+      0.7: 'yellow',
+      1.0: 'red'
+    }
+  }).addTo(map);
+
+  // =============================================
+  // Add clickable sector markers
+  // =============================================
+  sectorData.forEach(d => {
+    const density = (d.pop / d.area).toFixed(0);
+
+    const marker = L.circleMarker([d.lat, d.lng], {
+      radius: 6,
+      fillColor: '#ff6b35',
+      color: '#fff',
+      weight: 1.5,
+      fillOpacity: 0.85
+    }).addTo(map);
+
+    // Popup
+    marker.bindPopup(`
+      <div style="font-family:Arial;font-size:13px;color:#111;">
+        <b style="color:#e74c3c;font-size:14px;">📍 ${d.sector}</b><br/>
+        <hr style="margin:4px 0;border-color:#ddd"/>
+        <b>District:</b> ${d.district}<br/>
+        <b>Population:</b> ${d.pop.toLocaleString()}<br/>
+        <b>Area:</b> ${d.area} km²<br/>
+        <b>Density:</b> ${density} per km²
+      </div>
+    `);
+
+    // Hover — update info panel
+    marker.on('mouseover', function () {
+      document.getElementById('p-sector').textContent = d.sector;
+      document.getElementById('p-district').textContent = d.district;
+      document.getElementById('p-pop').textContent = d.pop.toLocaleString();
+      document.getElementById('p-area').textContent = d.area + ' km²';
+      document.getElementById('p-density').textContent = density + ' /km²';
+      this.setStyle({ radius: 9, fillColor: '#ffcc00' });
+    });
+
+    marker.on('mouseout', function () {
+      this.setStyle({ radius: 6, fillColor: '#ff6b35' });
+    });
+  });
+
+</script>
+</body>
+</html>
